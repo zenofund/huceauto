@@ -6,9 +6,10 @@
   "scripts": {
     "start": "echo 'Starting migrations...' && npx prisma migrate deploy && echo 'Migrations completed. Starting server...' && node dist/index.js",
     "dev": "nodemon src/index.ts",
-    "build": "tsc",
+    "build": "npx prisma generate && tsc",
     "postinstall": "prisma generate",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint . --ext .ts"
   },
   "keywords": [],
   "author": "",
@@ -16,7 +17,6 @@
   "type": "commonjs",
   "dependencies": {
     "@prisma/client": "^5.22.0",
-    "prisma": "^5.22.0",
     "axios": "^1.7.9",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^1.41.3",
@@ -30,6 +30,7 @@
     "multer": "^2.0.2",
     "multer-storage-cloudinary": "^4.0.0",
     "nodemailer": "^8.0.1",
+    "prisma": "^5.22.0",
     "socket.io": "^4.8.3",
     "zod": "^4.3.5"
   },
@@ -41,6 +42,9 @@
     "@types/multer": "^2.0.0",
     "@types/node": "^25.0.9",
     "@types/nodemailer": "^7.0.9",
+    "@typescript-eslint/eslint-plugin": "^8.32.0",
+    "@typescript-eslint/parser": "^8.32.0",
+    "eslint": "^8.57.0",
     "nodemon": "^3.1.11",
     "prisma": "^5.22.0",
     "ts-node": "^10.9.2",
@@ -48,5 +52,34 @@
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
+  },
+  "eslintConfig": {
+    "root": true,
+    "env": {
+      "node": true,
+      "es2021": true
+    },
+    "parser": "@typescript-eslint/parser",
+    "parserOptions": {
+      "ecmaVersion": "latest",
+      "sourceType": "module"
+    },
+    "plugins": [
+      "@typescript-eslint"
+    ],
+    "extends": [
+      "eslint:recommended",
+      "plugin:@typescript-eslint/recommended"
+    ],
+    "rules": {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-require-imports": "off",
+      "prefer-const": "off"
+    },
+    "ignorePatterns": [
+      "dist",
+      "node_modules"
+    ]
   }
 }
