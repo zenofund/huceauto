@@ -6,6 +6,7 @@
   "scripts": {
     "start": "echo 'Starting migrations...' && npx prisma migrate deploy && echo 'Migrations completed. Starting server...' && node dist/index.js",
     "dev": "nodemon src/index.ts",
+    "prebuild": "npx prisma generate",
     "build": "npx prisma generate && tsc",
     "postinstall": "prisma generate",
     "test": "echo \"Error: no test specified\" && exit 1",

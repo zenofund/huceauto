@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticateToken, isAdmin } from '../middleware/auth.middleware';
 import * as adminController from '../controllers/admin.controller';
 import * as walletController from '../controllers/wallet.controller';
+import * as subscriptionController from '../controllers/subscription.controller';
 
 const router = Router();
 
@@ -28,5 +29,11 @@ router.post('/wallet/approve/:transactionId', walletController.approveTransactio
 router.get('/config', adminController.getSystemConfig);
 router.post('/config', adminController.updateSystemConfig);
 router.post('/config/test-smtp', adminController.testSMTPDeliverability);
+
+// Subscription Plans
+router.get('/subscriptions/plans', subscriptionController.getSubscriptionPlans);
+router.post('/subscriptions/plans', subscriptionController.createSubscriptionPlan);
+router.put('/subscriptions/plans/:id', subscriptionController.updateSubscriptionPlan);
+router.delete('/subscriptions/plans/:id', subscriptionController.deleteSubscriptionPlan);
 
 export default router;
