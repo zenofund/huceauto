@@ -80,6 +80,7 @@ export const getCars = async (req: Request, res: Response) => {
             firstName: true,
             lastName: true,
             avatar: true,
+            createdAt: true,
             sellerProfile: {
               select: {
                 companyName: true,
@@ -149,6 +150,7 @@ export const getCarById = async (req: Request, res: Response) => {
             avatar: true,
             email: true,
             phone: true,
+            createdAt: true,
             sellerProfile: true
           }
         },
