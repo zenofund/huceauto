@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "CarStatus" ADD VALUE 'DELETION_PENDING';

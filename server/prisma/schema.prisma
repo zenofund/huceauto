@@ -1,0 +1,356 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String             @id @default(uuid())
+  email             String             @unique
+  password          String
+  firstName         String
+  lastName          String
+  phone             String?
+  role              Role               @default(BUYER)
+  status            UserStatus         @default(ACTIVE)
+  verified          Boolean            @default(false)
+  avatar            String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  cars              Car[]              @relation("SellerCars")
+  inspections       Inspection[]       @relation("InspectorInspections")
+  inspectionsRequested Inspection[]    @relation("BuyerInspections")
+  inspectorProfile  InspectorProfile?
+  receivedMessages  Message[]          @relation("ReceivedMessages")
+  sentMessages      Message[]          @relation("SentMessages")
+  offersMade        Offer[]            @relation("BuyerOffers")
+  offersReceived    Offer[]            @relation("SellerOffers")
+  savedCars         SavedCar[]
+  viewedCars        ViewedCar[]
+  sellerProfile     SellerProfile?
+  buyerProfile      BuyerProfile?
+  tickets           SupportTicket[]
+  transactions      Transaction[]
+  verificationCodes VerificationCode[]
+  wallet            Wallet?
+  notifications     Notification[]
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      String   // 'INSPECTION', 'OFFER', 'MESSAGE', 'SYSTEM'
+  read      Boolean  @default(false)
+  link      String?  // Optional link to redirect user
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Wallet {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  balance   Decimal  @default(0)
+  currency  String   @default("NGN")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model VerificationCode {
+  id        String              @id @default(uuid())
+  userId    String
+  codeHash  String
+  purpose   VerificationPurpose
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime            @default(now())
+  user      User                @relation(fields: [userId], references: [id])
+}
+
+model SellerProfile {
+  id            String     @id @default(uuid())
+  userId        String     @unique
+  type          SellerType
+  companyName   String?
+  companyRegNo  String?
+  address       String
+  nin           String?
+  bankName      String?
+  accountNumber String?
+  accountName   String?
+  autopay       Boolean    @default(false)
+  documents     String?
+  verified      Boolean    @default(false)
+  user          User       @relation(fields: [userId], references: [id])
+}
+
+model BuyerProfile {
+  id            String  @id @default(uuid())
+  userId        String  @unique
+  bankName      String?
+  accountNumber String?
+  accountName   String?
+  autopay       Boolean @default(false)
+  user          User    @relation(fields: [userId], references: [id])
+}
+
+model InspectorProfile {
+  id            String  @id @default(uuid())
+  userId        String  @unique
+  licenseNo     String?
+  officeName    String?
+  location      String?
+  bankName      String?
+  accountNumber String?
+  accountName   String?
+  autopay       Boolean @default(false)
+  verified      Boolean @default(false)
+  user          User    @relation(fields: [userId], references: [id])
+}
+
+model Car {
+  id           String       @id @default(uuid())
+  sellerId     String
+  title        String
+  description  String
+  price        Decimal
+  priceType    String?      @default("Fixed")
+  year         Int
+  make         String
+  model        String
+  mileage      Int
+  fuelType     String
+  transmission String
+  bodyType     String
+  color        String
+  condition    String
+  vin          String?      @unique
+  status       CarStatus    @default(AVAILABLE)
+  images       String
+  features     String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  driveType    DriveType?
+  views        Int          @default(0)
+  doors        Int?
+  location     String?
+  seller       User         @relation("SellerCars", fields: [sellerId], references: [id])
+  inspections  Inspection[]
+  offers       Offer[]
+  savedBy      SavedCar[]
+  viewedBy     ViewedCar[]
+}
+
+model SavedCar {
+  id        String   @id @default(uuid())
+  userId    String
+  carId     String
+  createdAt DateTime @default(now())
+  car       Car      @relation(fields: [carId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, carId])
+}
+
+model ViewedCar {
+  id        String   @id @default(uuid())
+  userId    String
+  carId     String
+  viewedAt  DateTime @default(now())
+  car       Car      @relation(fields: [carId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, carId])
+}
+
+model Inspection {
+  id            String           @id @default(uuid())
+  carId         String
+  buyerId       String?
+  inspectorId   String?
+  status        InspectionStatus @default(REQUESTED)
+  reportData    String?
+  fee           Decimal?
+  score         Int?
+  scheduledDate DateTime?
+  completedDate DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  car           Car              @relation(fields: [carId], references: [id])
+  buyer         User?            @relation("BuyerInspections", fields: [buyerId], references: [id])
+  inspector     User?            @relation("InspectorInspections", fields: [inspectorId], references: [id])
+  report        InspectionReport?
+}
+
+model InspectionReport {
+  id               String     @id @default(uuid())
+  inspectionId     String     @unique
+  inspection       Inspection @relation(fields: [inspectionId], references: [id])
+  
+  // Category Scores (0-100)
+  exteriorScore    Int        @default(0)
+  interiorScore    Int        @default(0)
+  engineScore      Int        @default(0)
+  suspensionScore  Int        @default(0)
+  tiresScore       Int        @default(0)
+  lightsScore      Int        @default(0)
+  
+  // Category Status Labels (e.g., "Good", "Fair", "Poor")
+  exteriorStatus   String?
+  interiorStatus   String?
+  engineStatus     String?
+  suspensionStatus String?
+  tiresStatus      String?
+  lightsStatus     String?
+  
+  // Detailed Content
+  recommendations  String?    @db.Text
+  photos           String[]   // Array of image URLs (PostgreSQL supports this)
+  
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+}
+
+model Offer {
+  id        String      @id @default(uuid())
+  carId     String
+  buyerId   String
+  sellerId  String
+  amount    Decimal
+  status    OfferStatus @default(PENDING)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  buyer     User        @relation("BuyerOffers", fields: [buyerId], references: [id])
+  car       Car         @relation(fields: [carId], references: [id])
+  seller    User        @relation("SellerOffers", fields: [sellerId], references: [id])
+}
+
+model Transaction {
+  id          String            @id @default(uuid())
+  userId      String
+  type        TransactionType
+  amount      Decimal
+  status      TransactionStatus @default(PENDING)
+  reference   String            @unique
+  description String?
+  createdAt   DateTime          @default(now())
+  paystackRef String?           @unique
+  metadata    String?
+  user        User              @relation(fields: [userId], references: [id])
+}
+
+model SupportTicket {
+  id        String           @id @default(uuid())
+  userId    String
+  subject   String
+  status    String           @default("OPEN")
+  priority  String           @default("MEDIUM")
+  messages  SupportMessage[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  user      User             @relation(fields: [userId], references: [id])
+}
+
+model SupportMessage {
+  id        String        @id @default(uuid())
+  ticketId  String
+  senderId  String
+  content   String
+  isAdmin   Boolean       @default(false)
+  createdAt DateTime      @default(now())
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id])
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  senderId   String
+  receiverId String
+  content    String
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id])
+}
+
+enum Role {
+  BUYER
+  SELLER
+  INSPECTOR
+  ADMIN
+  STAFF
+}
+
+enum SellerType {
+  INDIVIDUAL
+  COMPANY
+}
+
+enum CarStatus {
+  AVAILABLE
+  PENDING
+  SOLD
+  DELETION_PENDING
+}
+
+enum DriveType {
+  REAR_WHEEL
+  FRONT_WHEEL
+  ALL_WHEEL
+  FOUR_WHEEL
+}
+
+enum InspectionStatus {
+  REQUESTED
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum OfferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  COUNTERED
+  CANCELLED
+  COMPLETED
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  PURCHASE
+  REFUND
+  SALE
+  INSPECTION_FEE
+  INSPECTION_EARNING
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum VerificationPurpose {
+  SIGNUP
+  FORGOT_PASSWORD
+}
+
+enum UserStatus {
+  ACTIVE
+  DEACTIVATED
+}
+
+model SystemConfig {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
