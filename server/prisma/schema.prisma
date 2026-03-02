@@ -7,36 +7,70 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model SubscriptionPlan {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  price       Decimal
+  duration    Int      // Duration in days
+  features    String[] // Array of feature strings
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Access flags
+  listingLimit     Int      @default(5)
+  featuredListings Int      @default(0)
+  prioritySupport  Boolean  @default(false)
+  analyticsAccess  Boolean  @default(false)
+  
+  subscriptions UserSubscription[]
+}
+
+model UserSubscription {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  planId    String
+  startDate DateTime @default(now())
+  endDate   DateTime
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User             @relation(fields: [userId], references: [id])
+  plan SubscriptionPlan @relation(fields: [planId], references: [id])
+}
+
 model User {
-  id                String             @id @default(uuid())
-  email             String             @unique
-  password          String
-  firstName         String
-  lastName          String
-  phone             String?
-  role              Role               @default(BUYER)
-  status            UserStatus         @default(ACTIVE)
-  verified          Boolean            @default(false)
-  avatar            String?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  cars              Car[]              @relation("SellerCars")
-  inspections       Inspection[]       @relation("InspectorInspections")
-  inspectionsRequested Inspection[]    @relation("BuyerInspections")
-  inspectorProfile  InspectorProfile?
-  receivedMessages  Message[]          @relation("ReceivedMessages")
-  sentMessages      Message[]          @relation("SentMessages")
-  offersMade        Offer[]            @relation("BuyerOffers")
-  offersReceived    Offer[]            @relation("SellerOffers")
-  savedCars         SavedCar[]
-  viewedCars        ViewedCar[]
-  sellerProfile     SellerProfile?
-  buyerProfile      BuyerProfile?
-  tickets           SupportTicket[]
-  transactions      Transaction[]
-  verificationCodes VerificationCode[]
-  wallet            Wallet?
-  notifications     Notification[]
+  id                   String             @id @default(uuid())
+  email                String             @unique
+  password             String
+  firstName            String
+  lastName             String
+  phone                String?
+  role                 Role               @default(BUYER)
+  verified             Boolean            @default(false)
+  avatar               String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  status               UserStatus         @default(ACTIVE)
+  buyerProfile         BuyerProfile?
+  cars                 Car[]              @relation("SellerCars")
+  inspectionsRequested Inspection[]       @relation("BuyerInspections")
+  inspections          Inspection[]       @relation("InspectorInspections")
+  inspectorProfile     InspectorProfile?
+  receivedMessages     Message[]          @relation("ReceivedMessages")
+  sentMessages         Message[]          @relation("SentMessages")
+  notifications        Notification[]
+  offersMade           Offer[]            @relation("BuyerOffers")
+  offersReceived       Offer[]            @relation("SellerOffers")
+  savedCars            SavedCar[]
+  sellerProfile        SellerProfile?
+  tickets              SupportTicket[]
+  transactions         Transaction[]
+  verificationCodes    VerificationCode[]
+  viewedCars           ViewedCar[]
+  wallet               Wallet?
+  subscription         UserSubscription?
 }
 
 model Notification {
@@ -44,9 +78,9 @@ model Notification {
   userId    String
   title     String
   message   String
-  type      String   // 'INSPECTION', 'OFFER', 'MESSAGE', 'SYSTEM'
+  type      String
   read      Boolean  @default(false)
-  link      String?  // Optional link to redirect user
+  link      String?
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
 }
@@ -83,9 +117,9 @@ model SellerProfile {
   bankName      String?
   accountNumber String?
   accountName   String?
-  autopay       Boolean    @default(false)
   documents     String?
   verified      Boolean    @default(false)
+  autopay       Boolean    @default(false)
   user          User       @relation(fields: [userId], references: [id])
 }
 
@@ -103,13 +137,13 @@ model InspectorProfile {
   id            String  @id @default(uuid())
   userId        String  @unique
   licenseNo     String?
-  officeName    String?
   location      String?
-  bankName      String?
-  accountNumber String?
-  accountName   String?
-  autopay       Boolean @default(false)
   verified      Boolean @default(false)
+  accountName   String?
+  accountNumber String?
+  autopay       Boolean @default(false)
+  bankName      String?
+  officeName    String?
   user          User    @relation(fields: [userId], references: [id])
 }
 
@@ -119,7 +153,6 @@ model Car {
   title        String
   description  String
   price        Decimal
-  priceType    String?      @default("Fixed")
   year         Int
   make         String
   model        String
@@ -139,6 +172,7 @@ model Car {
   views        Int          @default(0)
   doors        Int?
   location     String?
+  priceType    String?      @default("Fixed")
   seller       User         @relation("SellerCars", fields: [sellerId], references: [id])
   inspections  Inspection[]
   offers       Offer[]
@@ -158,62 +192,55 @@ model SavedCar {
 }
 
 model ViewedCar {
-  id        String   @id @default(uuid())
-  userId    String
-  carId     String
-  viewedAt  DateTime @default(now())
-  car       Car      @relation(fields: [carId], references: [id])
-  user      User     @relation(fields: [userId], references: [id])
+  id       String   @id @default(uuid())
+  userId   String
+  carId    String
+  viewedAt DateTime @default(now())
+  car      Car      @relation(fields: [carId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
 
   @@unique([userId, carId])
 }
 
 model Inspection {
-  id            String           @id @default(uuid())
+  id            String            @id @default(uuid())
   carId         String
-  buyerId       String?
   inspectorId   String?
-  status        InspectionStatus @default(REQUESTED)
+  status        InspectionStatus  @default(REQUESTED)
   reportData    String?
-  fee           Decimal?
   score         Int?
   scheduledDate DateTime?
   completedDate DateTime?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  car           Car              @relation(fields: [carId], references: [id])
-  buyer         User?            @relation("BuyerInspections", fields: [buyerId], references: [id])
-  inspector     User?            @relation("InspectorInspections", fields: [inspectorId], references: [id])
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  buyerId       String?
+  fee           Decimal?
+  buyer         User?             @relation("BuyerInspections", fields: [buyerId], references: [id])
+  car           Car               @relation(fields: [carId], references: [id])
+  inspector     User?             @relation("InspectorInspections", fields: [inspectorId], references: [id])
   report        InspectionReport?
 }
 
 model InspectionReport {
   id               String     @id @default(uuid())
   inspectionId     String     @unique
-  inspection       Inspection @relation(fields: [inspectionId], references: [id])
-  
-  // Category Scores (0-100)
   exteriorScore    Int        @default(0)
   interiorScore    Int        @default(0)
   engineScore      Int        @default(0)
   suspensionScore  Int        @default(0)
   tiresScore       Int        @default(0)
   lightsScore      Int        @default(0)
-  
-  // Category Status Labels (e.g., "Good", "Fair", "Poor")
   exteriorStatus   String?
   interiorStatus   String?
   engineStatus     String?
   suspensionStatus String?
   tiresStatus      String?
   lightsStatus     String?
-  
-  // Detailed Content
-  recommendations  String?    @db.Text
-  photos           String[]   // Array of image URLs (PostgreSQL supports this)
-  
+  recommendations  String?
+  photos           String[]
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
+  inspection       Inspection @relation(fields: [inspectionId], references: [id])
 }
 
 model Offer {
@@ -239,8 +266,8 @@ model Transaction {
   reference   String            @unique
   description String?
   createdAt   DateTime          @default(now())
-  paystackRef String?           @unique
   metadata    String?
+  paystackRef String?           @unique
   user        User              @relation(fields: [userId], references: [id])
 }
 
@@ -249,10 +276,10 @@ model SupportTicket {
   userId    String
   subject   String
   status    String           @default("OPEN")
-  priority  String           @default("MEDIUM")
-  messages  SupportMessage[]
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
+  priority  String           @default("MEDIUM")
+  messages  SupportMessage[]
   user      User             @relation(fields: [userId], references: [id])
 }
 
@@ -275,6 +302,14 @@ model Message {
   createdAt  DateTime @default(now())
   receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
   sender     User     @relation("SentMessages", fields: [senderId], references: [id])
+}
+
+model SystemConfig {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum Role {
@@ -307,9 +342,9 @@ enum DriveType {
 enum InspectionStatus {
   REQUESTED
   SCHEDULED
-  IN_PROGRESS
   COMPLETED
   CANCELLED
+  IN_PROGRESS
 }
 
 enum OfferStatus {
@@ -345,12 +380,4 @@ enum VerificationPurpose {
 enum UserStatus {
   ACTIVE
   DEACTIVATED
-}
-
-model SystemConfig {
-  id        String   @id @default(uuid())
-  key       String   @unique
-  value     String   @db.Text
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
