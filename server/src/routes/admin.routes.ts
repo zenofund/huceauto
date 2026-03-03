@@ -12,6 +12,7 @@ router.use(isAdmin);
 
 // Dashboard stats
 router.get('/stats', adminController.getAdminStats);
+router.get('/finance/summary', adminController.getAdminFinanceSummary);
 
 // User management
 router.get('/users', adminController.getAdminUsers);

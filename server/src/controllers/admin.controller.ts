@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { PrismaClient, Role, InspectionStatus, TransactionStatus, CarStatus, OfferStatus } from '@prisma/client';
+import { PrismaClient, Role, InspectionStatus, TransactionStatus, CarStatus, OfferStatus, TransactionType, UserStatus } from '@prisma/client';
 import { sendEmail } from '../utils/notifications';
 
 const prisma = new PrismaClient();
@@ -341,6 +341,91 @@ export const getAdminStats = async (req: Request, res: Response) => {
   }
 };
 
+export const getAdminFinanceSummary = async (req: Request, res: Response) => {
+  try {
+    const now = new Date();
+    const yearParam = req.query.year ? Number(req.query.year) : now.getFullYear();
+    const targetYear = Number.isFinite(yearParam) ? yearParam : now.getFullYear();
+    const startOfMonth = new Date(targetYear, now.getMonth(), 1);
+    const endOfMonth = new Date(targetYear, now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const startOfYear = new Date(targetYear, 0, 1);
+    const endOfYear = new Date(targetYear, 11, 31, 23, 59, 59, 999);
+
+    const [
+      totalRevenueResult,
+      monthlyRevenueResult,
+      typeTotals,
+      monthlySaleResult,
+      yearlyTransactions
+    ] = await Promise.all([
+      prisma.transaction.aggregate({
+        where: { status: TransactionStatus.SUCCESS },
+        _sum: { amount: true }
+      }),
+      prisma.transaction.aggregate({
+        where: {
+          status: TransactionStatus.SUCCESS,
+          createdAt: { gte: startOfMonth, lte: endOfMonth }
+        },
+        _sum: { amount: true }
+      }),
+      prisma.transaction.groupBy({
+        by: ['type'],
+        where: { status: TransactionStatus.SUCCESS },
+        _sum: { amount: true }
+      }),
+      prisma.transaction.aggregate({
+        where: {
+          status: TransactionStatus.SUCCESS,
+          type: TransactionType.SALE,
+          createdAt: { gte: startOfMonth, lte: endOfMonth }
+        },
+        _sum: { amount: true }
+      }),
+      prisma.transaction.findMany({
+        where: {
+          status: TransactionStatus.SUCCESS,
+          createdAt: { gte: startOfYear, lte: endOfYear }
+        },
+        select: {
+          amount: true,
+          createdAt: true
+        }
+      })
+    ]);
+
+    const typeTotalsMap = typeTotals.reduce<Record<string, number>>((acc, item) => {
+      acc[item.type] = Number(item._sum.amount || 0);
+      return acc;
+    }, {});
+
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const revenueByMonth = months.map((month, index) => {
+      const total = yearlyTransactions
+        .filter(r => new Date(r.createdAt).getMonth() === index)
+        .reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+      return { month, total };
+    });
+
+    res.json({
+      totals: {
+        totalRevenue: Number(totalRevenueResult._sum.amount || 0),
+        monthlyRevenue: Number(monthlyRevenueResult._sum.amount || 0),
+        subscriptionRevenue: typeTotalsMap[TransactionType.DEPOSIT] || 0,
+        escrowFees: typeTotalsMap[TransactionType.PURCHASE] || 0,
+        totalEarnings: typeTotalsMap[TransactionType.SALE] || 0,
+        monthlyEarnings: Number(monthlySaleResult._sum.amount || 0),
+        subscriptionEarnings: typeTotalsMap[TransactionType.INSPECTION_EARNING] || 0,
+        escrowEarnings: typeTotalsMap[TransactionType.INSPECTION_FEE] || 0
+      },
+      revenueChart: revenueByMonth
+    });
+  } catch (error) {
+    console.error('Error fetching admin finance summary:', error);
+    res.status(500).json({ error: 'Failed to fetch finance summary' });
+  }
+};
+
 export const getAdminUsers = async (req: Request, res: Response) => {
   try {
     const { role, status, search, page = '1', limit = '10' } = req.query as { 
@@ -365,17 +450,13 @@ export const getAdminUsers = async (req: Request, res: Response) => {
     }
 
     if (status && status !== 'All') {
-      if (status === 'Non-active') {
-        return res.json({
-          users: [],
-          pagination: {
-            total: 0,
-            page: p,
-            limit: l,
-            totalPages: 0
-          }
-        });
-      }
+      const normalizedStatus =
+        status === 'Active' || status === 'ACTIVE'
+          ? UserStatus.ACTIVE
+          : status === 'Pending' || status === 'PENDING'
+            ? UserStatus.PENDING
+            : UserStatus.DEACTIVATED;
+      where.status = normalizedStatus;
     }
 
     if (search) {
@@ -426,7 +507,7 @@ export const getAdminUsers = async (req: Request, res: Response) => {
         month: 'short',
         year: 'numeric'
       }).replace(/ /g, ' '),
-      status: 'Active'
+      status: user.status
     }));
 
     res.json({
@@ -483,7 +564,7 @@ export const getAdminUserDetails = async (req: Request, res: Response) => {
         month: 'short',
         year: 'numeric'
       }).replace(/ /g, ' '),
-      status: 'Active' // Replace with real status if added to schema
+      status: user.status
     };
 
     res.json(formattedUser);
@@ -497,14 +578,39 @@ export const updateUserStatus = async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
     const { status } = req.body;
-    
-    const user = await prisma.user.update({
+
+    const existingUser = await prisma.user.findUnique({
       where: { id },
-      data: { 
-        status: status === 'Active' || status === 'ACTIVE' ? 'ACTIVE' : 'DEACTIVATED'
-      }
+      select: { role: true }
     });
-    
+
+    if (!existingUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const normalizedStatus: UserStatus =
+      status === 'Active' || status === 'ACTIVE'
+        ? UserStatus.ACTIVE
+        : status === 'Pending' || status === 'PENDING'
+          ? UserStatus.PENDING
+          : UserStatus.DEACTIVATED;
+    const isActive = normalizedStatus === 'ACTIVE';
+
+    const [user] = await prisma.$transaction([
+      prisma.user.update({
+        where: { id },
+        data: { status: normalizedStatus }
+      }),
+      ...(existingUser.role === Role.SELLER
+        ? [
+            prisma.sellerProfile.updateMany({
+              where: { userId: id },
+              data: { verified: isActive }
+            })
+          ]
+        : [])
+    ]);
+
     res.json(user);
   } catch (error) {
     console.error('Error updating user status:', error);

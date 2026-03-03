@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
-import { PrismaClient, Role, SellerType, VerificationPurpose } from '@prisma/client';
+import { PrismaClient, Role, SellerType, VerificationPurpose, UserStatus } from '@prisma/client';
 import { z, ZodError } from 'zod';
 import { sendEmail, sendOTP } from '../utils/notifications';
 
@@ -65,6 +65,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         password: hashedPassword,
         phone: validatedData.phone,
         role: (validatedData.role as Role) || Role.BUYER,
+        status: validatedData.role === 'SELLER' ? UserStatus.PENDING : UserStatus.ACTIVE,
         verified: false, // Explicitly set to false until verified
         // Create wallet for every user
         wallet: {
@@ -83,6 +84,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
                 : SellerType.INDIVIDUAL,
               companyName: validatedData.sellerProfile?.carLotName?.trim() || null,
               address: validatedData.sellerProfile?.address || '',
+              verified: false,
             },
           },
         }),
@@ -164,6 +166,15 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         error: 'Please verify your email to login',
         unverified: true,
         email: user.email 
+      });
+      return;
+    }
+
+    if (user.status !== UserStatus.ACTIVE) {
+      const isPending = user.status === UserStatus.PENDING;
+      res.status(403).json({
+        error: isPending ? 'Your account is pending admin approval' : 'Your account has been deactivated',
+        status: user.status
       });
       return;
     }

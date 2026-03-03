@@ -30,6 +30,11 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
         sellerProfile: true,
         buyerProfile: true,
         inspectorProfile: true,
+        subscription: {
+          include: {
+            plan: true
+          }
+        },
         wallet: {
           select: {
             balance: true,

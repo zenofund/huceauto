@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { PrismaClient, CarStatus, DriveType } from '@prisma/client';
+import { PrismaClient, CarStatus, DriveType, Role, UserStatus } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 
 const prisma = new PrismaClient();
@@ -201,6 +201,54 @@ export const createCar = async (req: any, res: Response) => {
 
     console.log('Create Request - User:', userId);
     console.log('Create Request - Body:', body);
+
+    const seller = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        sellerProfile: true,
+        subscription: { include: { plan: true } }
+      }
+    });
+
+    if (!seller || seller.role !== Role.SELLER) {
+      return res.status(403).json({ error: 'Only sellers can create listings' });
+    }
+
+    if (seller.status !== UserStatus.ACTIVE || !seller.sellerProfile?.verified) {
+      const isPending = seller.status === UserStatus.PENDING || !seller.sellerProfile?.verified;
+      return res.status(403).json({
+        error: isPending ? 'Seller account pending approval' : 'Seller account is deactivated',
+        code: isPending ? 'SELLER_PENDING' : 'SELLER_DEACTIVATED'
+      });
+    }
+
+    const now = new Date();
+    const subscription = seller.subscription;
+    const hasActiveSubscription = Boolean(
+      subscription &&
+      subscription.isActive &&
+      subscription.endDate >= now &&
+      subscription.plan
+    );
+    const listingLimit = hasActiveSubscription ? Number(subscription?.plan?.listingLimit || 0) : 5;
+
+    if (listingLimit > 0) {
+      const activeListingsCount = await prisma.car.count({
+        where: {
+          sellerId: userId,
+          status: { in: [CarStatus.AVAILABLE, CarStatus.PENDING] }
+        }
+      });
+
+      if (activeListingsCount >= listingLimit) {
+        return res.status(403).json({
+          error: 'Listing limit reached. Upgrade your plan to add more listings.',
+          code: 'LISTING_LIMIT_REACHED',
+          limit: listingLimit,
+          current: activeListingsCount
+        });
+      }
+    }
 
     const {
       price,
